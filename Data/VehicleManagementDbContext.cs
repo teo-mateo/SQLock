@@ -10,6 +10,7 @@ namespace Data
         public string Model { get; set; } = string.Empty;
         public int Year { get; set; }
         public string LicensePlate { get; set; } = string.Empty;
+        public int Mileage { get; set; }
         [Timestamp]
         public byte[] Timestamp { get; set; } = null!;
     }
