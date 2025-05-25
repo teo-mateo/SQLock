@@ -6,17 +6,13 @@ using SQLock;
 
 namespace SQLockDemo.Services.DemoRunner.Tests;
 
-public class SingleThreadHappyPathTest : SqlockTestBase
+public class SingleThreadHappyPathTest(
+    ISqlDistributedLockFactory lockFactory,
+    VehicleManagementDbContext dbContext,
+    ILoggerFactory loggerFactory)
+    : SqlockTestBase(lockFactory, dbContext, loggerFactory)
 {
-    public SingleThreadHappyPathTest(
-        ISqlDistributedLockFactory lockFactory,
-        VehicleManagementDbContext dbContext,
-        ILoggerFactory loggerFactory)
-        : base(lockFactory, dbContext, loggerFactory)
-    {
-    }
-
-    public override string Name => "Single-Thread Happy Path";
+    public override string Name => "Single-Thread-Happy-Path";
     public override string Description => "Basic mechanics work. TakeAsync returns, DMV shows lock in sys.dm_tran_locks; after DisposeAsync no lock remains";
 
     public override async Task RunAsync()

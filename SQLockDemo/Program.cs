@@ -23,6 +23,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddTransient<ISqlockTest, SingleThreadHappyPathTest>();
         services.AddTransient<ISqlockTest, MutualExclusionThreadTest>();
         services.AddTransient<ISqlockTest, InterProcessMutualExclusionTest>();
+        services.AddTransient<ISqlockTest, TimeoutRespectedTest>();
         
         // Register the DemoRunnerService
         services.AddScoped<DemoRunnerService>();
@@ -36,12 +37,31 @@ Console.WriteLine($"Connection string: {connectionString}");
 bool canConnect = SQLHelper.TestConnection(connectionString);
 Console.WriteLine(canConnect ? "Database connection successful!" : "Failed to connect to database.");
 
-if (args.Contains("--demo"))
+// Parse arguments
+string? demoTestName = null;
+bool runDemo = false;
+for (int i = 0; i < args.Length; i++)
 {
-    Console.WriteLine("Running SQLock demo tests...");
+    if (args[i] == "--demo")
+    {
+        runDemo = true;
+        if (i + 1 < args.Length && !args[i + 1].StartsWith("--"))
+        {
+            demoTestName = args[i + 1];
+            i++; // Consume the test name argument
+        }
+        break; // Found --demo, no need to check further args for it
+    }
+}
+
+if (runDemo)
+{
+    Console.WriteLine(string.IsNullOrWhiteSpace(demoTestName)
+        ? "Running all SQLock demo tests..."
+        : $"Running SQLock demo test: {demoTestName}...");
     using IServiceScope scope = host.Services.CreateScope();
     var demoRunner = scope.ServiceProvider.GetRequiredService<DemoRunnerService>();
-    await demoRunner.RunTestsAsync();
+    await demoRunner.RunTestsAsync(demoTestName);
     return;
 }
 

@@ -5,17 +5,13 @@ using System.Diagnostics;
 
 namespace SQLockDemo.Services.DemoRunner.Tests;
 
-public class InterProcessMutualExclusionTest : SqlockTestBase
+public class InterProcessMutualExclusionTest(
+    ISqlDistributedLockFactory lockFactory,
+    VehicleManagementDbContext dbContext,
+    ILoggerFactory loggerFactory)
+    : SqlockTestBase(lockFactory, dbContext, loggerFactory)
 {
-    public InterProcessMutualExclusionTest(
-        ISqlDistributedLockFactory lockFactory,
-        VehicleManagementDbContext dbContext,
-        ILoggerFactory loggerFactory)
-        : base(lockFactory, dbContext, loggerFactory)
-    {
-    }
-
-    public override string Name => "Inter-Process Mutual Exclusion 🔄";
+    public override string Name => "Mutual-Exclusion-Inter-Process";
     public override string Description => "Demonstrates that locks work across process boundaries. Two separate processes will try to acquire the same lock; the second process should block until the first releases it 🔒.";
 
     public override async Task RunAsync()

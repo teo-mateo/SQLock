@@ -5,17 +5,13 @@ using System.Diagnostics;
 
 namespace SQLockDemo.Services.DemoRunner.Tests;
 
-public class MutualExclusionThreadTest : SqlockTestBase
+public class MutualExclusionThreadTest(
+    ISqlDistributedLockFactory lockFactory,
+    VehicleManagementDbContext dbContext,
+    ILoggerFactory loggerFactory)
+    : SqlockTestBase(lockFactory, dbContext, loggerFactory)
 {
-    public MutualExclusionThreadTest(
-        ISqlDistributedLockFactory lockFactory,
-        VehicleManagementDbContext dbContext,
-        ILoggerFactory loggerFactory)
-        : base(lockFactory, dbContext, loggerFactory)
-    {
-    }
-
-    public override string Name => "Mutual Exclusion (Threads)";
+    public override string Name => "Mutual-Exclusion-Threads";
     public override string Description => "Only one thread in the same process can own the lock at a time. Two tasks call TakeAsync on the same resource; measure that second caller blocks until first disposes.";
 
     public override async Task RunAsync()
