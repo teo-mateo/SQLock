@@ -24,15 +24,30 @@ namespace SQLock
         }
 
         /// <summary>
+        /// Attempts to acquire the distributed lock and throws if not acquired.
+        /// </summary>
+        /// <param name="timeoutMs">The timeout in milliseconds.</param>
+        /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
+        public async Task AcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
+        {
+            bool acquired = await AcquireLockInternal(timeoutMs, cancellationToken).ConfigureAwait(false);
+            if (!acquired)
+                throw new InvalidOperationException($"Failed to acquire lock '{_lockName}' within {timeoutMs}ms.");
+        }
+
+        /// <summary>
         /// Attempts to acquire the distributed lock.
         /// </summary>
         /// <param name="timeoutMs">The timeout in milliseconds.</param>
         /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
         /// <returns>true if the lock was acquired, false if the lock could not be acquired.</returns>
-        /// <remarks>
-        /// If the lock is acquired, it must be released by calling <see cref="DisposeAsync"/>.
-        /// </remarks>
-        public async Task<bool> TryAcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
+        public Task<bool> TryAcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
+            => AcquireLockInternal(timeoutMs, cancellationToken);
+
+        /// <summary>
+        /// Shared internal logic for lock acquisition.
+        /// </summary>
+        private async Task<bool> AcquireLockInternal(int timeoutMs, CancellationToken cancellationToken)
         {
             var openedHere = false;
             if (_connection.State != ConnectionState.Open)
@@ -74,10 +89,10 @@ namespace SQLock
             await cmd.ExecuteNonQueryAsync(cancellationToken);
             var result = (int)resultParam.Value!;
             _lockAcquired = result >= 0;
-            
+
             if (!_lockAcquired && openedHere)
                 await _connection.CloseAsync();
-            
+
             return _lockAcquired;
         }
 
@@ -85,6 +100,7 @@ namespace SQLock
         {
             if (!_lockAcquired)
                 return;
+            
             await using var cmd = _connection.CreateCommand();
             cmd.CommandText = "sp_releaseapplock";
             cmd.CommandType = CommandType.StoredProcedure;
