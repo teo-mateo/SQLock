@@ -3,6 +3,7 @@ using System.Data;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
 
 namespace SQLock
 {
@@ -14,15 +15,20 @@ namespace SQLock
         private readonly DbConnection _connection;
         private readonly string _lockName;
         private bool _lockAcquired;
+        
+        public SqlDistributedLock(string connectionString, string entityName, long id)
+            : this(new SqlConnection(connectionString), entityName, id)
+        {
+        }
 
-        public SqlDistributedLock(DbConnection connection, string entityName, long id)
+        private SqlDistributedLock(DbConnection connection, string entityName, long id)
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             if (string.IsNullOrWhiteSpace(entityName))
                 throw new ArgumentException("Entity name cannot be null or whitespace.", nameof(entityName));
             _lockName = $"{entityName}:{id}";
         }
-
+        
         /// <summary>
         /// Attempts to acquire the distributed lock and throws if not acquired.
         /// </summary>
@@ -49,12 +55,7 @@ namespace SQLock
         /// </summary>
         private async Task<bool> AcquireLockInternal(int timeoutMs, CancellationToken cancellationToken)
         {
-            var openedHere = false;
-            if (_connection.State != ConnectionState.Open)
-            {
-                await _connection.OpenAsync(cancellationToken);
-                openedHere = true;
-            }
+            await _connection.OpenAsync(cancellationToken);
 
             await using var cmd = _connection.CreateCommand();
             cmd.CommandTimeout = (int)Math.Ceiling(timeoutMs / 1000.0);   // seconds
@@ -90,7 +91,7 @@ namespace SQLock
             var result = (int)resultParam.Value!;
             _lockAcquired = result >= 0;
 
-            if (!_lockAcquired && openedHere)
+            if (!_lockAcquired)
                 await _connection.CloseAsync();
 
             return _lockAcquired;
@@ -98,25 +99,27 @@ namespace SQLock
 
         public async ValueTask DisposeAsync()
         {
-            if (!_lockAcquired)
-                return;
-            
-            await using var cmd = _connection.CreateCommand();
-            cmd.CommandText = "sp_releaseapplock";
-            cmd.CommandType = CommandType.StoredProcedure;
+            if (_lockAcquired)
+            {
+                await using var cmd = _connection.CreateCommand();
+                cmd.CommandText = "sp_releaseapplock";
+                cmd.CommandType = CommandType.StoredProcedure;
 
-            var resourceParam = cmd.CreateParameter();
-            resourceParam.ParameterName = "@Resource";
-            resourceParam.Value = _lockName;
-            cmd.Parameters.Add(resourceParam);
+                var resourceParam = cmd.CreateParameter();
+                resourceParam.ParameterName = "@Resource";
+                resourceParam.Value = _lockName;
+                cmd.Parameters.Add(resourceParam);
 
-            var lockOwnerParam = cmd.CreateParameter();
-            lockOwnerParam.ParameterName = "@LockOwner";
-            lockOwnerParam.Value = "Session";
-            cmd.Parameters.Add(lockOwnerParam);
+                var lockOwnerParam = cmd.CreateParameter(); 
+                lockOwnerParam.ParameterName = "@LockOwner";
+                lockOwnerParam.Value = "Session";
+                cmd.Parameters.Add(lockOwnerParam);
 
-            await cmd.ExecuteNonQueryAsync();
-            _lockAcquired = false;
+                await cmd.ExecuteNonQueryAsync();
+                _lockAcquired = false;
+            }
+
+            await _connection.DisposeAsync();
         }
 
         public void Dispose()
