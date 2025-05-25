@@ -1,25 +1,20 @@
+using Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.EntityFrameworkCore;
-using System;
-using Data;
 using SQLock;
 using SQLockDemo.Services;
 
-var host = Host.CreateDefaultBuilder(args)
-    .ConfigureAppConfiguration((hostingContext, config) =>
-    {
-        config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-    })
+IHost host = Host.CreateDefaultBuilder(args)
+    .ConfigureAppConfiguration((hostingContext, config) => { config.AddJsonFile("appsettings.json", false, true); })
     .ConfigureServices((context, services) =>
     {
-        var connectionString = context.Configuration.GetConnectionString("DefaultConnection")!;
+        string connectionString = context.Configuration.GetConnectionString("DefaultConnection")!;
         services.AddDbContext<VehicleManagementDbContext>(options => options.UseSqlServer(connectionString));
         services.AddSingleton<ISqlDistributedLockFactory>(_ => new SqlDistributedLockFactory(connectionString));
-        
-        services.AddScoped<IVehiclesService, VehiclesService>();
 
+        services.AddScoped<IVehiclesService, VehiclesService>();
     })
     .Build();
 
@@ -44,12 +39,14 @@ if (args.Contains("--getall"))
 {
     using IServiceScope scope = host.Services.CreateScope();
     var vehiclesService = scope.ServiceProvider.GetRequiredService<IVehiclesService>();
-    var vehicles = await vehiclesService.GetAllAsync();
-    foreach (var v in vehicles)
+    List<Vehicle> vehicles = await vehiclesService.GetAllAsync();
+    foreach (Vehicle v in vehicles)
     {
-        var ts = BitConverter.ToString(v.Timestamp).Replace("-", "");
-        Console.WriteLine($"Id: {v.Id}, Make: {v.Make}, Model: {v.Model}, Year: {v.Year}, LicensePlate: {v.LicensePlate}, Mileage: {v.Mileage}, Timestamp: {ts}");
+        string ts = BitConverter.ToString(v.Timestamp).Replace("-", "");
+        Console.WriteLine(
+            $"Id: {v.Id}, Make: {v.Make}, Model: {v.Model}, Year: {v.Year}, LicensePlate: {v.LicensePlate}, Mileage: {v.Mileage}, Timestamp: {ts}");
     }
+
     return;
 }
 
@@ -57,16 +54,17 @@ if (args.Contains("--sim"))
 {
     using IServiceScope scope = host.Services.CreateScope();
     var vehiclesService = scope.ServiceProvider.GetRequiredService<IVehiclesService>();
-    var vehicles = await vehiclesService.GetAllAsync();
+    List<Vehicle> vehicles = await vehiclesService.GetAllAsync();
     if (vehicles.Count == 0)
     {
         Console.WriteLine("No vehicles found. Please seed the database first.");
         return;
     }
+
     var rand = new Random();
-    for (int i = 0; i < 100; i++)
+    for (var i = 0; i < 100; i++)
     {
-        var randomVehicle = vehicles[rand.Next(vehicles.Count)];
+        Vehicle randomVehicle = vehicles[rand.Next(vehicles.Count)];
         long vehicleId = randomVehicle.Id;
         Console.WriteLine($"Simulating race condition on Vehicle Id: {vehicleId}");
         await vehiclesService.SimulateRaceConditionAsync(vehicleId);
@@ -79,16 +77,17 @@ if (args.Contains("--simlock"))
 {
     using IServiceScope scope = host.Services.CreateScope();
     var vehiclesService = scope.ServiceProvider.GetRequiredService<IVehiclesService>();
-    var vehicles = await vehiclesService.GetAllAsync();
+    List<Vehicle> vehicles = await vehiclesService.GetAllAsync();
     if (vehicles.Count == 0)
     {
         Console.WriteLine("No vehicles found. Please seed the database first.");
         return;
     }
+
     var rand = new Random();
-    for (int i = 0; i < 100; i++)
+    for (var i = 0; i < 100; i++)
     {
-        var randomVehicle = vehicles[rand.Next(vehicles.Count)];
+        Vehicle randomVehicle = vehicles[rand.Next(vehicles.Count)];
         long vehicleId = randomVehicle.Id;
         Console.WriteLine($"Simulating race condition with distributed lock on Vehicle Id: {vehicleId}");
         await vehiclesService.SimulateRaceConditionWithDistributedLockAsync(vehicleId);

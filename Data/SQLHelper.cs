@@ -1,47 +1,21 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 
-namespace Data
+namespace Data;
+
+public static class SQLHelper
 {
-    public static class SQLHelper
+    public static bool TestConnection(string connectionString)
     {
-        public static SqlConnection GetOpenConnection(string connectionString)
+        try
         {
-            var conn = new SqlConnection(connectionString);
+            using var conn = new SqlConnection(connectionString);
             conn.Open();
-            return conn;
+            return conn.State == ConnectionState.Open;
         }
-
-        public static int ExecuteNonQuery(string connectionString, string commandText, params SqlParameter[] parameters)
+        catch
         {
-            using var conn = GetOpenConnection(connectionString);
-            using var cmd = new SqlCommand(commandText, conn);
-            if (parameters != null && parameters.Length > 0)
-                cmd.Parameters.AddRange(parameters);
-            return cmd.ExecuteNonQuery();
-        }
-
-        public static object? ExecuteScalar(string connectionString, string commandText, params SqlParameter[] parameters)
-        {
-            using var conn = GetOpenConnection(connectionString);
-            using var cmd = new SqlCommand(commandText, conn);
-            if (parameters != null && parameters.Length > 0)
-                cmd.Parameters.AddRange(parameters);
-            return cmd.ExecuteScalar();
-        }
-
-        public static bool TestConnection(string connectionString)
-        {
-            try
-            {
-                using var conn = new SqlConnection(connectionString);
-                conn.Open();
-                return conn.State == ConnectionState.Open;
-            }
-            catch
-            {
-                return false;
-            }
+            return false;
         }
     }
 }

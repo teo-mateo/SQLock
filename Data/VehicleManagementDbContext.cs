@@ -1,27 +1,24 @@
-using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
-namespace Data
+namespace Data;
+
+public class Vehicle
 {
-    public class Vehicle
-    {
-        public long Id { get; set; }
-        public string Make { get; set; } = string.Empty;
-        public string Model { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string LicensePlate { get; set; } = string.Empty;
-        public int Mileage { get; set; }
-        [Timestamp]
-        public byte[] Timestamp { get; set; } = null!;
-    }
+    public long Id { get; init; }
+    [MaxLength(500)]
+    public string Make { get; init; } = string.Empty;
+    [MaxLength(500)]
+    public string Model { get; init; } = string.Empty;
+    public int Year { get; init; }
+    [MaxLength(20)]
+    public required string LicensePlate { get; init; } = string.Empty;
+    public int Mileage { get; set; }
 
-    public class VehicleManagementDbContext : DbContext
-    {
-        public VehicleManagementDbContext(DbContextOptions<VehicleManagementDbContext> options)
-            : base(options)
-        {
-        }
+    [Timestamp] public byte[] Timestamp { get; init; } = null!;
+}
 
-        public DbSet<Vehicle> Vehicles { get; set; } = null!;
-    }
+public class VehicleManagementDbContext(DbContextOptions<VehicleManagementDbContext> options) : DbContext(options)
+{
+    public DbSet<Vehicle> Vehicles { get; init; } = null!;
 }
