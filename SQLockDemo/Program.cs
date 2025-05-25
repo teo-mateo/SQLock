@@ -106,4 +106,68 @@ if (args.Contains("--simlock"))
     return;
 }
 
+// Handle --take command to take a specific lock and hold it for a specified time
+if (args.Contains("--take"))
+{
+    // Get the lock key
+    int keyIndex = Array.IndexOf(args, "--take");
+    if (keyIndex >= args.Length - 1)
+    {
+        Console.WriteLine("Error: No lock key specified after --take");
+        return;
+    }
+    string lockKey = args[keyIndex + 1];
+    
+    // Get the hold time (default to 5000ms if not specified)
+    int holdTimeMs = 5000;
+    if (args.Contains("--hold"))
+    {
+        int holdIndex = Array.IndexOf(args, "--hold");
+        if (holdIndex < args.Length - 1 && int.TryParse(args[holdIndex + 1], out int parsedHoldTime))
+        {
+            holdTimeMs = parsedHoldTime;
+        }
+        else
+        {
+            Console.WriteLine("Warning: Invalid hold time specified, using default of 5000ms");
+        }
+    }
+    
+    await TakeLockAndHold(host.Services, lockKey, holdTimeMs);
+    return;
+}
+
 Console.WriteLine("Hello, World!");
+
+// Helper method to take a lock and hold it for the specified time
+static async Task TakeLockAndHold(IServiceProvider services, string lockKey, int holdTimeMs)
+{
+    Console.WriteLine($"Taking lock '{lockKey}' and holding for {holdTimeMs}ms...");
+    
+    using var scope = services.CreateScope();
+    var lockFactory = scope.ServiceProvider.GetRequiredService<ISqlDistributedLockFactory>();
+    
+    var stopwatch = new System.Diagnostics.Stopwatch();
+    stopwatch.Start();
+    
+    try
+    {
+        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Attempting to take lock '{lockKey}'...");
+        await using var lock1 = await lockFactory.CreateLockAndTake(lockKey);
+        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Successfully acquired lock '{lockKey}'");
+        
+        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Holding lock for {holdTimeMs}ms...");
+        await Task.Delay(holdTimeMs);
+        
+        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Releasing lock '{lockKey}'...");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error: {ex.Message}");
+    }
+    finally
+    {
+        stopwatch.Stop();
+        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Operation completed");
+    }
+}
