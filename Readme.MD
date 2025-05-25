@@ -1,31 +1,44 @@
-﻿#### This project
-Is a .NET 8.0 library that provides a simple and reliable way to coordinate distributed systems using existing database infrastructure.
+#### This project
+Is a .NET 8.0 library and demo for distributed locking using SQL Server.
 
 #### Key Features
-
-- Works with SQL Server
-- Uses sp_getapplock to acquire locks
-- Works at session level
-
-Contains a simple API that is easy to integrate into existing applications.
-
-#### How It Works
-
-The library uses the sp_getapplock stored procedure to acquire locks. 
-It uses a unique lock key to ensure that only one process has the lock at a time.
-The lock key is composed of the name of the entity and its ID.
-
-Acquiring the lock has a timeout of 30 seconds. If a lock is not acquired by then, an exception is thrown.
-
-The lock is automatically released when the lock object is disposed.
+- Works with SQL Server (via Microsoft.Data.SqlClient)
+- Uses sp_getapplock for distributed, session-level locks
+- Simple, familiar API: AcquireAsync (throws on failure) and TryAcquireAsync (returns bool)
+- Lock key is based on entity name and ID
+- Automatic lock release on disposal
+- Supports connection string or DbConnection
 
 #### Projects
+- **SQLock**: Library for distributed SQL-based locks
+- **SQLockDemo**: Console demo for lock usage and concurrency scenarios
+- **Data**: Entity Framework Core data project
 
-- SQLock - SQL-based Distributed Lock
-- SQLockDemo - SQL-based Distributed Lock Demo - a console application that demonstrates the usage of the SQLock library
-- Data - Mimics a real world data project
+#### How It Works
+The library uses the sp_getapplock stored procedure to acquire exclusive locks in SQL Server. Each lock is identified by a key (entity name + ID). Locks are acquired with a timeout (default 30s). If not acquired, AcquireAsync throws and TryAcquireAsync returns false. Locks are released on Dispose/DisposeAsync.
 
-#### Command Line Usage
+#### Demo Usage
+- `--seed` : Seeds the database with 10,000 vehicles if empty
+- `--getall` : Lists all vehicles in the database
+- `--sim` : Runs 100 race condition simulations (without distributed lock)
+- `--simlock` : Runs 100 race condition simulations (with distributed lock)
 
-`SQLockDemo --seed`
-Seeds the database with some data -- 10 vehicles, if the database is empty.
+#### Example
+```csharp
+await using var sqlLock = new SqlDistributedLock(connectionString, "vehicle", vehicleId);
+if (await sqlLock.TryAcquireAsync())
+{
+    // Do work
+}
+
+// Or throw on failure:
+await sqlLock.AcquireAsync();
+```
+
+#### Prerequisites
+- .NET 8.0
+- SQL Server instance
+- Microsoft.Data.SqlClient NuGet package
+
+#### About
+This project demonstrates distributed locking for microservices or multi-process scenarios using only SQL Server. The demo simulates concurrent updates to a Vehicles table, showing the effect of locking.
