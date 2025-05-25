@@ -57,13 +57,16 @@ public class SqlDistributedLock : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
-    ///     Attempts to acquire the distributed lock and throws if not acquired.
+    ///     Attempts to take the distributed lock and throws if not acquired.
     /// </summary>
     /// <param name="timeoutMs">The timeout in milliseconds.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
-    public async Task AcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
+    public async Task TakeAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
     {
-        bool acquired = await AcquireLockInternal(timeoutMs, cancellationToken);
+        if (_lockAcquired)
+            throw new InvalidOperationException($"Lock '{_lockName}' is already acquired.");
+        
+        bool acquired = await TakeInternal(timeoutMs, cancellationToken);
         if (!acquired)
             throw new InvalidOperationException($"Failed to acquire lock '{_lockName}' within {timeoutMs}ms.");
     }
@@ -74,15 +77,18 @@ public class SqlDistributedLock : IAsyncDisposable, IDisposable
     /// <param name="timeoutMs">The timeout in milliseconds.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>true if the lock was acquired, false if the lock could not be acquired.</returns>
-    public Task<bool> TryAcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
+    public Task<bool> TryTakeAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
     {
-        return AcquireLockInternal(timeoutMs, cancellationToken);
+        if (_lockAcquired)
+            throw new InvalidOperationException($"Lock '{_lockName}' is already acquired.");
+        
+        return TakeInternal(timeoutMs, cancellationToken);
     }
 
     /// <summary>
     ///     Shared internal logic for lock acquisition.
     /// </summary>
-    private async Task<bool> AcquireLockInternal(int timeoutMs, CancellationToken cancellationToken)
+    private async Task<bool> TakeInternal(int timeoutMs, CancellationToken cancellationToken)
     {
         await _connection.OpenAsync(cancellationToken);
 

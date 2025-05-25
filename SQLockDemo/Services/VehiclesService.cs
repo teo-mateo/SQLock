@@ -97,8 +97,8 @@ public class VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockF
             try
             {
                 await using var db1 = new VehicleManagementDbContext(options);
-                await using SqlDistributedLock sqlLock = lockFactory.TakeLock("vehicle", vehicleId);
-                if (!await sqlLock.TryAcquireAsync())
+                await using SqlDistributedLock sqlLock = await lockFactory.CreateLockAndTake("vehicle", vehicleId);
+                if (!await sqlLock.TryTakeAsync())
                 {
                     Console.WriteLine("[Task1] Could not acquire distributed lock.");
                     return;
@@ -120,8 +120,8 @@ public class VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockF
             try
             {
                 await using var db2 = new VehicleManagementDbContext(options);
-                await using SqlDistributedLock sqlLock = lockFactory.TakeLock("vehicle", vehicleId);
-                await sqlLock.AcquireAsync();
+                await using SqlDistributedLock sqlLock = await lockFactory.CreateLockAndTake("vehicle", vehicleId);
+                await sqlLock.TakeAsync();
 
                 Vehicle v2 = await db2.Vehicles.FirstAsync(v => v.Id == vehicleId);
                 v2.Mileage += 200;

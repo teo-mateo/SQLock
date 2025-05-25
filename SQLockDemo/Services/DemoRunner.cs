@@ -39,14 +39,14 @@ public class DemoRunner
     {
         const string testLockName = "demo_test_lock";
         _logger.LogInformation("\n=== Test: Single-Thread Happy Path ===");
-        _logger.LogInformation("Description: Basic mechanics work. AcquireAsync returns, DMV shows lock in sys.dm_tran_locks; after DisposeAsync no lock remains");
+        _logger.LogInformation("Description: Basic mechanics work. TakeAsync returns, DMV shows lock in sys.dm_tran_locks; after DisposeAsync no lock remains");
         
         try
         {
             // Step 1: Create and acquire lock
             _logger.LogInformation("Step 1: Acquiring lock '{LockName}'...", testLockName);
-            await using SqlDistributedLock lck = _lockFactory.TakeLock(testLockName);
-            await lck.AcquireAsync();
+            await using SqlDistributedLock lck = _lockFactory.CreateLock(testLockName);
+            await lck.TakeAsync();
             _logger.LogInformation("✅ Lock acquired successfully");
             
             // Step 2: Verify lock exists in DB
@@ -94,7 +94,7 @@ public class DemoRunner
         const string testLockName = "mutual_exclusion_test_lock";
         _logger.LogInformation("\n=== Test: Mutual Exclusion (Threads) ===");
         _logger.LogInformation("Description: Only one thread in the same process can own the lock at a time.");
-        _logger.LogInformation("Two tasks call AcquireAsync on the same resource; measure that second caller blocks until first disposes.");
+        _logger.LogInformation("Two tasks call TakeAsync on the same resource; measure that second caller blocks until first disposes.");
         
         try
         {
@@ -112,9 +112,8 @@ public class DemoRunner
             Task task1 = Task.Run(async () =>
             {
                 _logger.LogInformation("Task 1: Acquiring lock '{LockName}'...", testLockName);
-                await using var lock1 = _lockFactory.TakeLock(testLockName);
+                await using var lock1 = await _lockFactory.CreateLockAndTake(testLockName);
                 
-                await lock1.AcquireAsync();
                 var firstAcquireTime = stopwatch.ElapsedMilliseconds;
                 _logger.LogInformation("Task 1: Lock acquired at {Time}ms", firstAcquireTime);
                 
@@ -151,8 +150,7 @@ public class DemoRunner
                 secondLockStarted.SetResult(true);
                 
                 // Try to acquire the lock (this should block until Task 1 releases it)
-                await using var lock2 = _lockFactory.TakeLock(testLockName);
-                await lock2.AcquireAsync();
+                await using var lock2 = await _lockFactory.CreateLockAndTake(testLockName);
                 
                 var secondAcquireTime = stopwatch.ElapsedMilliseconds;
                 _logger.LogInformation("Task 2: Lock acquired at {Time}ms", secondAcquireTime);
