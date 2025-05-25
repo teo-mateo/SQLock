@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics;
 using Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,9 @@ public class DemoRunner
         
         // Test 1: Single-thread happy path
         await SingleThreadHappyPathTestAsync();
+        
+        // Test 2: Mutual exclusion between threads
+        await MutualExclusionThreadsTestAsync();
     }
 
     private async Task SingleThreadHappyPathTestAsync()
@@ -82,6 +86,114 @@ public class DemoRunner
         catch (Exception ex)
         {
             _logger.LogError(ex, "Test FAILED: Single-Thread Happy Path ❌");
+        }
+    }
+    
+    private async Task MutualExclusionThreadsTestAsync()
+    {
+        const string testLockName = "mutual_exclusion_test_lock";
+        _logger.LogInformation("\n=== Test: Mutual Exclusion (Threads) ===");
+        _logger.LogInformation("Description: Only one thread in the same process can own the lock at a time.");
+        _logger.LogInformation("Two tasks call AcquireAsync on the same resource; measure that second caller blocks until first disposes.");
+        
+        try
+        {
+            // Variables to track execution
+            var firstLockAcquired = new TaskCompletionSource<bool>();
+            var secondLockStarted = new TaskCompletionSource<bool>();
+            var firstLockReleased = new TaskCompletionSource<bool>();
+            var secondLockAcquired = new TaskCompletionSource<bool>();
+            
+            // Timing measurements
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+            
+            // Task 1: First thread acquires the lock and holds it
+            Task task1 = Task.Run(async () =>
+            {
+                _logger.LogInformation("Task 1: Acquiring lock '{LockName}'...", testLockName);
+                await using var lock1 = _lockFactory.TakeLock(testLockName);
+                
+                await lock1.AcquireAsync();
+                var firstAcquireTime = stopwatch.ElapsedMilliseconds;
+                _logger.LogInformation("Task 1: Lock acquired at {Time}ms", firstAcquireTime);
+                
+                // Signal that the first lock is acquired
+                firstLockAcquired.SetResult(true);
+                
+                // Wait for Task 2 to start trying to acquire the lock
+                await secondLockStarted.Task;
+                
+                // Hold the lock for a while
+                _logger.LogInformation("Task 1: Holding lock for 2 seconds...");
+                await Task.Delay(2000);
+                
+                // Release the lock
+                _logger.LogInformation("Task 1: Releasing lock...");
+                var firstReleaseTime = stopwatch.ElapsedMilliseconds;
+                _logger.LogInformation("Task 1: Lock released at {Time}ms", firstReleaseTime);
+                
+                // Signal that the first lock is released
+                firstLockReleased.SetResult(true);
+            });
+            
+            // Task 2: Second thread tries to acquire the same lock
+            Task task2 = Task.Run(async () =>
+            {
+                // Wait for first lock to be acquired
+                await firstLockAcquired.Task;
+                
+                _logger.LogInformation("Task 2: Attempting to acquire the same lock...");
+                var secondStartTime = stopwatch.ElapsedMilliseconds;
+                _logger.LogInformation("Task 2: Attempt started at {Time}ms", secondStartTime);
+                
+                // Signal that the second lock attempt has started
+                secondLockStarted.SetResult(true);
+                
+                // Try to acquire the lock (this should block until Task 1 releases it)
+                await using var lock2 = _lockFactory.TakeLock(testLockName);
+                await lock2.AcquireAsync();
+                
+                var secondAcquireTime = stopwatch.ElapsedMilliseconds;
+                _logger.LogInformation("Task 2: Lock acquired at {Time}ms", secondAcquireTime);
+                
+                // Signal that the second lock is acquired
+                secondLockAcquired.SetResult(true);
+                
+                // Hold the lock briefly to ensure we can see it in the logs
+                await Task.Delay(500);
+            });
+            
+            // Wait for both tasks to complete
+            await Task.WhenAll(task1, task2);
+            
+            // Wait for all signals to be set
+            await Task.WhenAll(
+                firstLockAcquired.Task,
+                secondLockStarted.Task,
+                firstLockReleased.Task,
+                secondLockAcquired.Task);
+            
+            // Check if the second task acquired the lock after the first task released it
+            bool secondAcquiredAfterFirstReleased = secondLockAcquired.Task.Result && 
+                                                   firstLockReleased.Task.Result &&
+                                                   secondLockAcquired.Task.Status == TaskStatus.RanToCompletion &&
+                                                   firstLockReleased.Task.Status == TaskStatus.RanToCompletion;
+            
+            if (secondAcquiredAfterFirstReleased)
+            {
+                _logger.LogInformation("✅ Test PASSED: Task 2 successfully waited for Task 1 to release the lock");
+            }
+            else
+            {
+                _logger.LogError("❌ Test FAILED: Task 2 did not properly wait for Task 1 to release the lock");
+            }
+            
+            stopwatch.Stop();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Test FAILED: Mutual Exclusion (Threads) ❌");
         }
     }
 
