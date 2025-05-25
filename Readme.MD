@@ -110,3 +110,15 @@ catch (OperationCanceledException)
 
 ## About
 This project demonstrates a robust solution for distributed locking in microservices architectures or any multi-process scenarios using SQL Server as the coordination mechanism. The comprehensive test suite ensures reliability across various edge cases and scenarios.
+
+## Future Work / TODOs
+The following test scenarios and features are planned for future implementation:
+
+| # | Scenario | Description | Test Type | Implementation Details |
+|---|----------|-------------|-----------|------------------------|
+| 6 | 🔵 Re-entrant acquisition | Same connection returns result 1 (already owned). | Unit (mock ADO) or integration | Call AcquireAsync twice on one instance; expect no exception and only one lock row in DMV. |
+| 7 | 🔵 Disposal always frees connection | No open sessions after GC when lock never acquired. | Integration | TryAcquireAsync → false, forget to dispose; run GC/Wait, assert session count unchanged. |
+| 8 | Exception pathway | Any error inside AcquireLockInternal still disposes/ closes connection. | Integration | Tamper @LockTimeout to an impossible negative → expect SqlException; afterwards DMV shows no open session; connection-pool count unchanged. |
+| 9 | Factory resolves from DI | DI wiring produces a usable lock. | Unit + Integration | Build a minimal Host with AddSqlDistributedLockFactory<TContext>(); resolve factory; create and acquire lock. |
+| 10 | Throughput/perf smoke | Lock adds minimal overhead under contention. | Benchmark (BenchmarkDotNet) | Measure median latency for 1 → 32 concurrent callers; ensure it matches expectations (< N ms). |
+| 11 | Crash resilience | Lock disappears when process dies abruptly. | Manual / scripted | Start app, acquire lock, kill -9 PID; check DMV until lock row vanishes (SQL detects broken SPID). |
