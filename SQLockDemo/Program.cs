@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using SQLock;
 using SQLockDemo.Services;
 
@@ -133,41 +134,42 @@ if (args.Contains("--take"))
         }
     }
     
-    await TakeLockAndHold(host.Services, lockKey, holdTimeMs);
+    using var scope = host.Services.CreateScope();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await TakeLockAndHold(scope.ServiceProvider, lockKey, holdTimeMs, logger);
     return;
 }
 
 Console.WriteLine("Hello, World!");
 
 // Helper method to take a lock and hold it for the specified time
-static async Task TakeLockAndHold(IServiceProvider services, string lockKey, int holdTimeMs)
+static async Task TakeLockAndHold(IServiceProvider services, string lockKey, int holdTimeMs, ILogger logger)
 {
-    Console.WriteLine($"Taking lock '{lockKey}' and holding for {holdTimeMs}ms...");
+    logger.LogInformation("Taking lock '{LockKey}' and holding for {HoldTime}ms...", lockKey, holdTimeMs);
     
-    using var scope = services.CreateScope();
-    var lockFactory = scope.ServiceProvider.GetRequiredService<ISqlDistributedLockFactory>();
+    var lockFactory = services.GetRequiredService<ISqlDistributedLockFactory>();
     
     var stopwatch = new System.Diagnostics.Stopwatch();
     stopwatch.Start();
     
     try
     {
-        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Attempting to take lock '{lockKey}'...");
+        logger.LogInformation("[{ElapsedTime}ms] Attempting to take lock '{LockKey}'...", stopwatch.ElapsedMilliseconds, lockKey);
         await using var lock1 = await lockFactory.CreateLockAndTake(lockKey);
-        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Successfully acquired lock '{lockKey}'");
+        logger.LogInformation("[{ElapsedTime}ms] Successfully acquired lock '{LockKey}'", stopwatch.ElapsedMilliseconds, lockKey);
         
-        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Holding lock for {holdTimeMs}ms...");
+        logger.LogInformation("[{ElapsedTime}ms] Holding lock for {HoldTime}ms...", stopwatch.ElapsedMilliseconds, holdTimeMs);
         await Task.Delay(holdTimeMs);
         
-        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Releasing lock '{lockKey}'...");
+        logger.LogInformation("[{ElapsedTime}ms] Releasing lock '{LockKey}'...", stopwatch.ElapsedMilliseconds, lockKey);
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error: {ex.Message}");
+        logger.LogError(ex, "Error while taking lock: {ErrorMessage}", ex.Message);
     }
     finally
     {
         stopwatch.Stop();
-        Console.WriteLine($"[{stopwatch.ElapsedMilliseconds}ms] Operation completed");
+        logger.LogInformation("[{ElapsedTime}ms] Operation completed", stopwatch.ElapsedMilliseconds);
     }
 }
