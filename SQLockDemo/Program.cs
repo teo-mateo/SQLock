@@ -13,7 +13,7 @@ IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((hostingContext, config) => { config.AddJsonFile("appsettings.json", false, true); })
     .ConfigureServices((hostContext, services) =>
     {
-        var connectionString = hostContext.Configuration.GetConnectionString("DefaultConnection");
+        string connectionString = hostContext.Configuration.GetConnectionString("DefaultConnection")!;
         services.AddDbContext<Data.VehicleManagementDbContext>(options => options.UseSqlServer(connectionString));
         services.AddSingleton<ISqlDistributedLockFactory>(_ => new SqlDistributedLockFactory(connectionString));
 

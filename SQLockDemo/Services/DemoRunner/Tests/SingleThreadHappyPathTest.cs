@@ -50,7 +50,8 @@ public class SingleThreadHappyPathTest : SqlockTestBase
 
             // Step 3: Release lock
             Logger.LogInformation("Step 3: Releasing lock...");
-            await lck.DisposeAsync();
+            // ReSharper disable once DisposeOnUsingVariable
+            await lck.DisposeAsync(); 
             Logger.LogInformation("✅ Lock released");
 
             // Step 4: Verify lock removal
@@ -76,20 +77,20 @@ public class SingleThreadHappyPathTest : SqlockTestBase
     
     private async Task<bool> CheckLockExistsAsync(string lockName)
     {
-        string sql = @"
+        var sql = @"
             SELECT COUNT(*) 
             FROM sys.dm_tran_locks 
             WHERE resource_description LIKE @LockName + '%' 
               AND request_status = 'GRANT'
               AND request_owner_type = 'SESSION'";
 
-        using var connection = new SqlConnection(DbContext.Database.GetConnectionString());
+        await using var connection = new SqlConnection(DbContext.Database.GetConnectionString());
         await connection.OpenAsync();
-        
-        using var command = new SqlCommand(sql, connection);
+
+        await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@LockName", lockName);
         
-        int lockCount = (int)await command.ExecuteScalarAsync();
+        var lockCount = (int)(await command.ExecuteScalarAsync() ?? throw new Exception("Failed to retrieve lock count"));
         return lockCount > 0;
     }
 }
