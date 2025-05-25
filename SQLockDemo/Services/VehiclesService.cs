@@ -111,7 +111,7 @@ namespace SQLockDemo.Services
                     await using DbConnection lockConn1 = db1.Database.GetDbConnection();
                     await lockConn1.OpenAsync();
                     await using var sqlLock = new SqlDistributedLock(lockConn1, "vehicle", vehicleId);
-                    if (!await sqlLock.AcquireAsync())
+                    if (!await sqlLock.TryAcquireAsync())
                     {
                         Console.WriteLine("[Task1] Could not acquire distributed lock.");
                         return;
@@ -138,7 +138,7 @@ namespace SQLockDemo.Services
                     await using DbConnection lockConn2 = db2.Database.GetDbConnection();
                     await lockConn2.OpenAsync();
                     await using var sqlLock = new SqlDistributedLock(lockConn2, "vehicle", vehicleId);
-                    if (!await sqlLock.AcquireAsync())
+                    if (!await sqlLock.TryAcquireAsync())
                     {
                         Console.WriteLine("[Task2] Could not acquire distributed lock.");
                         return;

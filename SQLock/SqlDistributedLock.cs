@@ -9,7 +9,7 @@ namespace SQLock
     /// <summary>
     /// Implements a distributed lock using SQL Server's sp_getapplock (Session scope only).
     /// </summary>
-    public class SqlDistributedLock : IAsyncDisposable
+    public class SqlDistributedLock : IAsyncDisposable, IDisposable
     {
         private readonly DbConnection _connection;
         private readonly string _lockName;
@@ -19,16 +19,30 @@ namespace SQLock
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             if (string.IsNullOrWhiteSpace(entityName))
-                throw new ArgumentException("Lock base name cannot be null or whitespace.", nameof(entityName));
+                throw new ArgumentException("Entity name cannot be null or whitespace.", nameof(entityName));
             _lockName = $"{entityName}:{id}";
         }
 
-        public async Task<bool> AcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Attempts to acquire the distributed lock.
+        /// </summary>
+        /// <param name="timeoutMs">The timeout in milliseconds.</param>
+        /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
+        /// <returns>true if the lock was acquired, false if the lock could not be acquired.</returns>
+        /// <remarks>
+        /// If the lock is acquired, it must be released by calling <see cref="DisposeAsync"/>.
+        /// </remarks>
+        public async Task<bool> TryAcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
         {
+            var openedHere = false;
             if (_connection.State != ConnectionState.Open)
+            {
                 await _connection.OpenAsync(cancellationToken);
+                openedHere = true;
+            }
 
             await using var cmd = _connection.CreateCommand();
+            cmd.CommandTimeout = (int)Math.Ceiling(timeoutMs / 1000.0);   // seconds
             cmd.CommandText = "sp_getapplock";
             cmd.CommandType = CommandType.StoredProcedure;
 
@@ -60,6 +74,10 @@ namespace SQLock
             await cmd.ExecuteNonQueryAsync(cancellationToken);
             var result = (int)resultParam.Value!;
             _lockAcquired = result >= 0;
+            
+            if (!_lockAcquired && openedHere)
+                await _connection.CloseAsync();
+            
             return _lockAcquired;
         }
 
@@ -67,7 +85,6 @@ namespace SQLock
         {
             if (!_lockAcquired)
                 return;
-            
             await using var cmd = _connection.CreateCommand();
             cmd.CommandText = "sp_releaseapplock";
             cmd.CommandType = CommandType.StoredProcedure;
@@ -84,6 +101,11 @@ namespace SQLock
 
             await cmd.ExecuteNonQueryAsync();
             _lockAcquired = false;
+        }
+
+        public void Dispose()
+        {
+            DisposeAsync().GetAwaiter().GetResult();
         }
     }
 }
