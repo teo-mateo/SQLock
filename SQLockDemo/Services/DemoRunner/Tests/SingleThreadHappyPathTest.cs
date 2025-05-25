@@ -73,20 +73,26 @@ public class SingleThreadHappyPathTest(
     
     private async Task<bool> CheckLockExistsAsync(string lockName)
     {
+        // Use a more direct query that doesn't rely on specific lock name formatting
         var sql = @"
             SELECT COUNT(*) 
             FROM sys.dm_tran_locks 
-            WHERE resource_description LIKE @LockName + '%' 
+            WHERE resource_type = 'APPLICATION' 
               AND request_status = 'GRANT'
-              AND request_owner_type = 'SESSION'";
+              AND request_owner_type = 'SESSION'
+              AND resource_description LIKE '%' + @LockName + '%'";
 
         await using var connection = new SqlConnection(DbContext.Database.GetConnectionString());
         await connection.OpenAsync();
+
+        Logger.LogInformation("Checking for APPLICATION lock containing: '{LockName}'", lockName);
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@LockName", lockName);
         
         var lockCount = (int)(await command.ExecuteScalarAsync() ?? throw new Exception("Failed to retrieve lock count"));
+        Logger.LogInformation("Lock count from sys.dm_tran_locks: {LockCount}", lockCount);
+        
         return lockCount > 0;
     }
 }
