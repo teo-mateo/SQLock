@@ -6,17 +6,26 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SQLock;
 using SQLockDemo.Services;
+using SQLockDemo.Services.DemoRunner;
+using SQLockDemo.Services.DemoRunner.Tests;
 
 IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((hostingContext, config) => { config.AddJsonFile("appsettings.json", false, true); })
-    .ConfigureServices((context, services) =>
+    .ConfigureServices((hostContext, services) =>
     {
-        string connectionString = context.Configuration.GetConnectionString("DefaultConnection")!;
-        services.AddDbContext<VehicleManagementDbContext>(options => options.UseSqlServer(connectionString));
+        var connectionString = hostContext.Configuration.GetConnectionString("DefaultConnection");
+        services.AddDbContext<Data.VehicleManagementDbContext>(options => options.UseSqlServer(connectionString));
         services.AddSingleton<ISqlDistributedLockFactory>(_ => new SqlDistributedLockFactory(connectionString));
 
         services.AddScoped<IVehiclesService, VehiclesService>();
-        services.AddScoped<DemoRunner>();
+        
+        // Register test classes
+        services.AddTransient<ISqlockTest, SingleThreadHappyPathTest>();
+        services.AddTransient<ISqlockTest, MutualExclusionThreadTest>();
+        services.AddTransient<ISqlockTest, InterProcessMutualExclusionTest>();
+        
+        // Register the DemoRunnerService
+        services.AddScoped<DemoRunnerService>();
     })
     .Build();
 
@@ -31,7 +40,7 @@ if (args.Contains("--demo"))
 {
     Console.WriteLine("Running SQLock demo tests...");
     using IServiceScope scope = host.Services.CreateScope();
-    var demoRunner = scope.ServiceProvider.GetRequiredService<DemoRunner>();
+    var demoRunner = scope.ServiceProvider.GetRequiredService<DemoRunnerService>();
     await demoRunner.RunTestsAsync();
     return;
 }
@@ -61,6 +70,7 @@ if (args.Contains("--getall"))
     return;
 }
 
+// --sim command to simulate race conditions -- expected to result in concurrency conflicts
 if (args.Contains("--sim"))
 {
     using IServiceScope scope = host.Services.CreateScope();
@@ -84,6 +94,7 @@ if (args.Contains("--sim"))
     return;
 }
 
+// --simlock command to simulate race conditions with distributed locks -- expected to succeed
 if (args.Contains("--simlock"))
 {
     using IServiceScope scope = host.Services.CreateScope();
@@ -107,7 +118,7 @@ if (args.Contains("--simlock"))
     return;
 }
 
-// Handle --take command to take a specific lock and hold it for a specified time
+// --take command to take a specific lock and hold it for a specified time
 if (args.Contains("--take"))
 {
     // Get the lock key
@@ -140,8 +151,6 @@ if (args.Contains("--take"))
     return;
 }
 
-Console.WriteLine("Hello, World!");
-
 // Helper method to take a lock and hold it for the specified time
 static async Task TakeLockAndHold(IServiceProvider services, string lockKey, int holdTimeMs, ILogger logger)
 {
@@ -155,7 +164,7 @@ static async Task TakeLockAndHold(IServiceProvider services, string lockKey, int
     try
     {
         logger.LogInformation("[{ElapsedTime}ms] Attempting to take lock '{LockKey}'...", stopwatch.ElapsedMilliseconds, lockKey);
-        await using var lock1 = await lockFactory.CreateLockAndTake(lockKey);
+        await using SqlDistributedLock lock1 = await lockFactory.CreateLockAndTake(lockKey);
         logger.LogInformation("[{ElapsedTime}ms] Successfully acquired lock '{LockKey}'", stopwatch.ElapsedMilliseconds, lockKey);
         
         logger.LogInformation("[{ElapsedTime}ms] Holding lock for {HoldTime}ms...", stopwatch.ElapsedMilliseconds, holdTimeMs);

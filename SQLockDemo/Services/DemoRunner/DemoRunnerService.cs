@@ -7,27 +7,16 @@ using Microsoft.Extensions.Logging;
 using SQLock;
 using System.IO;
 
-namespace SQLockDemo.Services;
+namespace SQLockDemo.Services.DemoRunner;
 
-public class DemoRunner
+public class DemoRunnerService(
+    ISqlDistributedLockFactory lockFactory,
+    VehicleManagementDbContext dbContext,
+    ILogger<DemoRunnerService> logger)
 {
-    private readonly ISqlDistributedLockFactory _lockFactory;
-    private readonly VehicleManagementDbContext _dbContext;
-    private readonly ILogger<DemoRunner> _logger;
-
-    public DemoRunner(
-        ISqlDistributedLockFactory lockFactory,
-        VehicleManagementDbContext dbContext,
-        ILogger<DemoRunner> logger)
-    {
-        _lockFactory = lockFactory;
-        _dbContext = dbContext;
-        _logger = logger;
-    }
-
     public async Task RunTestsAsync()
     {
-        _logger.LogInformation("Starting SQLock demo tests...");
+        logger.LogInformation("Starting SQLock demo tests...");
         
         // Test 1: Single-thread happy path
         await SingleThreadHappyPathTestAsync();
@@ -42,63 +31,63 @@ public class DemoRunner
     private async Task SingleThreadHappyPathTestAsync()
     {
         const string testLockName = "demo_test_lock";
-        _logger.LogInformation("\n=== Test: Single-Thread Happy Path ===");
-        _logger.LogInformation("Description: Basic mechanics work. TakeAsync returns, DMV shows lock in sys.dm_tran_locks; after DisposeAsync no lock remains");
+        logger.LogInformation("\n=== Test: Single-Thread Happy Path ===");
+        logger.LogInformation("Description: Basic mechanics work. TakeAsync returns, DMV shows lock in sys.dm_tran_locks; after DisposeAsync no lock remains");
         
         try
         {
             // Step 1: Create and acquire lock
-            _logger.LogInformation("Step 1: Acquiring lock '{LockName}'...", testLockName);
-            await using SqlDistributedLock lck = _lockFactory.CreateLock(testLockName);
+            logger.LogInformation("Step 1: Acquiring lock '{LockName}'...", testLockName);
+            await using SqlDistributedLock lck = lockFactory.CreateLock(testLockName);
             await lck.TakeAsync();
-            _logger.LogInformation("✅ Lock acquired successfully");
+            logger.LogInformation("✅ Lock acquired successfully");
             
             // Step 2: Verify lock exists in DB
-            _logger.LogInformation("Step 2: Checking lock existence in database...");
+            logger.LogInformation("Step 2: Checking lock existence in database...");
             bool lockExists = await CheckLockExistsAsync(testLockName);
             
             if (lockExists)
             {
-                _logger.LogInformation("✅ Lock found in sys.dm_tran_locks");
+                logger.LogInformation("✅ Lock found in sys.dm_tran_locks");
             }
             else
             {
-                _logger.LogError("❌ Lock not found in sys.dm_tran_locks!");
+                logger.LogError("❌ Lock not found in sys.dm_tran_locks!");
                 return;
             }
 
             // Step 3: Release lock
-            _logger.LogInformation("Step 3: Releasing lock...");
+            logger.LogInformation("Step 3: Releasing lock...");
             await lck.DisposeAsync();
-            _logger.LogInformation("✅ Lock released");
+            logger.LogInformation("✅ Lock released");
 
             // Step 4: Verify lock removal
-            _logger.LogInformation("Step 4: Checking lock cleanup...");
+            logger.LogInformation("Step 4: Checking lock cleanup...");
             lockExists = await CheckLockExistsAsync(testLockName);
             
             if (!lockExists)
             {
-                _logger.LogInformation("✅ Lock successfully removed from sys.dm_tran_locks");
-                _logger.LogInformation("Test PASSED: Single-Thread Happy Path ✅");
+                logger.LogInformation("✅ Lock successfully removed from sys.dm_tran_locks");
+                logger.LogInformation("Test PASSED: Single-Thread Happy Path ✅");
             }
             else
             {
-                _logger.LogError("❌ Lock still present in sys.dm_tran_locks after disposal!");
-                _logger.LogInformation("Test FAILED: Single-Thread Happy Path ❌");
+                logger.LogError("❌ Lock still present in sys.dm_tran_locks after disposal!");
+                logger.LogInformation("Test FAILED: Single-Thread Happy Path ❌");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Test FAILED: Single-Thread Happy Path ❌");
+            logger.LogError(ex, "Test FAILED: Single-Thread Happy Path ❌");
         }
     }
     
     private async Task MutualExclusionThreadsTestAsync()
     {
         const string testLockName = "mutual_exclusion_test_lock";
-        _logger.LogInformation("\n=== Test: Mutual Exclusion (Threads) ===");
-        _logger.LogInformation("Description: Only one thread in the same process can own the lock at a time.");
-        _logger.LogInformation("Two tasks call TakeAsync on the same resource; measure that second caller blocks until first disposes.");
+        logger.LogInformation("\n=== Test: Mutual Exclusion (Threads) ===");
+        logger.LogInformation("Description: Only one thread in the same process can own the lock at a time.");
+        logger.LogInformation("Two tasks call TakeAsync on the same resource; measure that second caller blocks until first disposes.");
         
         try
         {
@@ -115,11 +104,11 @@ public class DemoRunner
             // Task 1: First thread acquires the lock and holds it
             Task task1 = Task.Run(async () =>
             {
-                _logger.LogInformation("Task 1: Acquiring lock '{LockName}'...", testLockName);
-                await using var lock1 = await _lockFactory.CreateLockAndTake(testLockName);
+                logger.LogInformation("Task 1: Acquiring lock '{LockName}'...", testLockName);
+                await using var lock1 = await lockFactory.CreateLockAndTake(testLockName);
                 
                 var firstAcquireTime = stopwatch.ElapsedMilliseconds;
-                _logger.LogInformation("Task 1: Lock acquired at {Time}ms", firstAcquireTime);
+                logger.LogInformation("Task 1: Lock acquired at {Time}ms", firstAcquireTime);
                 
                 // Signal that the first lock is acquired
                 firstLockAcquired.SetResult(true);
@@ -128,13 +117,13 @@ public class DemoRunner
                 await secondLockStarted.Task;
                 
                 // Hold the lock for a while
-                _logger.LogInformation("Task 1: Holding lock for 2 seconds...");
+                logger.LogInformation("Task 1: Holding lock for 2 seconds...");
                 await Task.Delay(2000);
                 
                 // Release the lock
-                _logger.LogInformation("Task 1: Releasing lock...");
+                logger.LogInformation("Task 1: Releasing lock...");
                 var firstReleaseTime = stopwatch.ElapsedMilliseconds;
-                _logger.LogInformation("Task 1: Lock released at {Time}ms", firstReleaseTime);
+                logger.LogInformation("Task 1: Lock released at {Time}ms", firstReleaseTime);
                 
                 // Signal that the first lock is released
                 firstLockReleased.SetResult(true);
@@ -146,18 +135,18 @@ public class DemoRunner
                 // Wait for first lock to be acquired
                 await firstLockAcquired.Task;
                 
-                _logger.LogInformation("Task 2: Attempting to acquire the same lock...");
+                logger.LogInformation("Task 2: Attempting to acquire the same lock...");
                 var secondStartTime = stopwatch.ElapsedMilliseconds;
-                _logger.LogInformation("Task 2: Attempt started at {Time}ms", secondStartTime);
+                logger.LogInformation("Task 2: Attempt started at {Time}ms", secondStartTime);
                 
                 // Signal that the second lock attempt has started
                 secondLockStarted.SetResult(true);
                 
                 // Try to acquire the lock (this should block until Task 1 releases it)
-                await using var lock2 = await _lockFactory.CreateLockAndTake(testLockName);
+                await using var lock2 = await lockFactory.CreateLockAndTake(testLockName);
                 
                 var secondAcquireTime = stopwatch.ElapsedMilliseconds;
-                _logger.LogInformation("Task 2: Lock acquired at {Time}ms", secondAcquireTime);
+                logger.LogInformation("Task 2: Lock acquired at {Time}ms", secondAcquireTime);
                 
                 // Signal that the second lock is acquired
                 secondLockAcquired.SetResult(true);
@@ -184,26 +173,26 @@ public class DemoRunner
             
             if (secondAcquiredAfterFirstReleased)
             {
-                _logger.LogInformation("✅ Test PASSED: Task 2 successfully waited for Task 1 to release the lock");
+                logger.LogInformation("✅ Test PASSED: Task 2 successfully waited for Task 1 to release the lock");
             }
             else
             {
-                _logger.LogError("❌ Test FAILED: Task 2 did not properly wait for Task 1 to release the lock");
+                logger.LogError("❌ Test FAILED: Task 2 did not properly wait for Task 1 to release the lock");
             }
             
             stopwatch.Stop();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Test FAILED: Mutual Exclusion (Threads) ❌");
+            logger.LogError(ex, "Test FAILED: Mutual Exclusion (Threads) ❌");
         }
     }
 
     private async Task InterProcessMutualExclusionTestAsync()
     {
-        _logger.LogInformation("\n=== Test: Inter-Process Mutual Exclusion ===");
-        _logger.LogInformation("Description: Demonstrates that locks work across process boundaries.");
-        _logger.LogInformation("Two separate processes will try to acquire the same lock; the second process should block until the first releases it.");
+        logger.LogInformation("\n=== Test: Inter-Process Mutual Exclusion ===");
+        logger.LogInformation("Description: Demonstrates that locks work across process boundaries.");
+        logger.LogInformation("Two separate processes will try to acquire the same lock; the second process should block until the first releases it.");
         
         try
         {
@@ -211,25 +200,24 @@ public class DemoRunner
             string testLockKey = $"inter_process_test_{Guid.NewGuid():N}".Substring(0, 32);
             int holdTimeMs = 5000; // First process will hold the lock for 5 seconds
             
-            _logger.LogInformation("Using test lock key: {LockKey}", testLockKey);
+            logger.LogInformation("Using test lock key: {LockKey}", testLockKey);
             
             var stopwatch = new Stopwatch();
             stopwatch.Start();
             
-            _logger.LogInformation("[{ElapsedTime}ms] Starting first process to take and hold the lock...", stopwatch.ElapsedMilliseconds);
+            logger.LogInformation("[{ElapsedTime}ms] Starting first process to take and hold the lock...", stopwatch.ElapsedMilliseconds);
             
-            // Get the correct project directory path
-            string projectDir = Directory.GetCurrentDirectory();
-            _logger.LogInformation("Project directory: {ProjectDir}", projectDir);
+            // Get the executable path
+            string exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SQLockDemo.exe");
+            logger.LogInformation("Executable path: {ExePath}", exePath);
             
             // Start the first process that will take the lock and hold it
             var process1 = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "dotnet",
-                    Arguments = $"run --project \"{projectDir}\" -- --take {testLockKey} --hold {holdTimeMs}",
-                    WorkingDirectory = projectDir,
+                    FileName = exePath,
+                    Arguments = $"--take {testLockKey} --hold {holdTimeMs}",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true
@@ -237,22 +225,21 @@ public class DemoRunner
             };
             
             process1.Start();
-            _logger.LogInformation("[{ElapsedTime}ms] Started first process (PID: {ProcessId}) - will hold lock for {HoldTime}ms", 
+            logger.LogInformation("[{ElapsedTime}ms] Started first process (PID: {ProcessId}) - will hold lock for {HoldTime}ms", 
                 stopwatch.ElapsedMilliseconds, process1.Id, holdTimeMs);
             
             // Wait a bit to ensure the first process has time to acquire the lock
             await Task.Delay(1000);
             
-            _logger.LogInformation("[{ElapsedTime}ms] Starting second process to attempt to take the same lock...", stopwatch.ElapsedMilliseconds);
+            logger.LogInformation("[{ElapsedTime}ms] Starting second process to attempt to take the same lock...", stopwatch.ElapsedMilliseconds);
             
             // Start the second process that will try to acquire the same lock
             var process2 = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "dotnet",
-                    Arguments = $"run --project \"{projectDir}\" -- --take {testLockKey} --hold 1000",
-                    WorkingDirectory = projectDir,
+                    FileName = exePath,
+                    Arguments = $"--take {testLockKey} --hold 1000",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true
@@ -260,7 +247,7 @@ public class DemoRunner
             };
             
             process2.Start();
-            _logger.LogInformation("[{ElapsedTime}ms] Started second process (PID: {ProcessId}) - should block until first process releases the lock", 
+            logger.LogInformation("[{ElapsedTime}ms] Started second process (PID: {ProcessId}) - should block until first process releases the lock", 
                 stopwatch.ElapsedMilliseconds, process2.Id);
             
             // Start reading output from processes
@@ -268,7 +255,7 @@ public class DemoRunner
             var process2OutputTask = Task.Run(() => ReadProcessOutputAsync(process2, "Process 2"));
             
             // Wait for both processes to complete
-            _logger.LogInformation("[{ElapsedTime}ms] Waiting for both processes to complete...", stopwatch.ElapsedMilliseconds);
+            logger.LogInformation("[{ElapsedTime}ms] Waiting for both processes to complete...", stopwatch.ElapsedMilliseconds);
             
             await Task.WhenAll(
                 Task.Run(() => process1.WaitForExit()),
@@ -283,21 +270,21 @@ public class DemoRunner
             // Verify the test results
             if (elapsedTime >= holdTimeMs)
             {
-                _logger.LogInformation("✅ Test PASSED: Inter-Process Mutual Exclusion");
-                _logger.LogInformation("Total test duration: {ElapsedTime}ms, which is greater than the first process hold time ({HoldTime}ms)", 
+                logger.LogInformation("✅ Test PASSED: Inter-Process Mutual Exclusion");
+                logger.LogInformation("Total test duration: {ElapsedTime}ms, which is greater than the first process hold time ({HoldTime}ms)", 
                     elapsedTime, holdTimeMs);
-                _logger.LogInformation("This confirms the second process had to wait for the first process to release the lock");
+                logger.LogInformation("This confirms the second process had to wait for the first process to release the lock");
             }
             else
             {
-                _logger.LogError("❌ Test FAILED: Inter-Process Mutual Exclusion");
-                _logger.LogError("Test completed too quickly ({ElapsedTime}ms), suggesting the second process didn't wait for the lock", 
+                logger.LogError("❌ Test FAILED: Inter-Process Mutual Exclusion");
+                logger.LogError("Test completed too quickly ({ElapsedTime}ms), suggesting the second process didn't wait for the lock", 
                     elapsedTime);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Test FAILED: Inter-Process Mutual Exclusion ❌");
+            logger.LogError(ex, "Test FAILED: Inter-Process Mutual Exclusion ❌");
         }
     }
     
@@ -305,10 +292,10 @@ public class DemoRunner
     {
         while (!process.StandardOutput.EndOfStream)
         {
-            string line = await process.StandardOutput.ReadLineAsync();
+            string? line = await process.StandardOutput.ReadLineAsync();
             if (!string.IsNullOrEmpty(line))
             {
-                _logger.LogInformation("[{ProcessName}] {OutputLine}", processName, line);
+                logger.LogInformation("[{ProcessName}] {OutputLine}", processName, line);
             }
         }
     }
@@ -324,7 +311,7 @@ public class DemoRunner
               AND request_status = 'GRANT'
               AND request_owner_type = 'SESSION'";
 
-        using var connection = new SqlConnection(_dbContext.Database.GetConnectionString());
+        using var connection = new SqlConnection(dbContext.Database.GetConnectionString());
         await connection.OpenAsync();
         
         using var command = new SqlCommand(sql, connection);
