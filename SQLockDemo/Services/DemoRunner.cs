@@ -5,6 +5,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SQLock;
+using System.IO;
 
 namespace SQLockDemo.Services;
 
@@ -33,6 +34,9 @@ public class DemoRunner
         
         // Test 2: Mutual exclusion between threads
         await MutualExclusionThreadsTestAsync();
+        
+        // Test 3: Inter-process mutual exclusion
+        await InterProcessMutualExclusionTestAsync();
     }
 
     private async Task SingleThreadHappyPathTestAsync()
@@ -192,6 +196,120 @@ public class DemoRunner
         catch (Exception ex)
         {
             _logger.LogError(ex, "Test FAILED: Mutual Exclusion (Threads) ❌");
+        }
+    }
+
+    private async Task InterProcessMutualExclusionTestAsync()
+    {
+        _logger.LogInformation("\n=== Test: Inter-Process Mutual Exclusion ===");
+        _logger.LogInformation("Description: Demonstrates that locks work across process boundaries.");
+        _logger.LogInformation("Two separate processes will try to acquire the same lock; the second process should block until the first releases it.");
+        
+        try
+        {
+            // Generate a unique lock key for this test
+            string testLockKey = $"inter_process_test_{Guid.NewGuid():N}".Substring(0, 32);
+            int holdTimeMs = 5000; // First process will hold the lock for 5 seconds
+            
+            _logger.LogInformation("Using test lock key: {LockKey}", testLockKey);
+            
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+            
+            _logger.LogInformation("[{ElapsedTime}ms] Starting first process to take and hold the lock...", stopwatch.ElapsedMilliseconds);
+            
+            // Get the correct project directory path
+            string projectDir = Directory.GetCurrentDirectory();
+            _logger.LogInformation("Project directory: {ProjectDir}", projectDir);
+            
+            // Start the first process that will take the lock and hold it
+            var process1 = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = $"run --project \"{projectDir}\" -- --take {testLockKey} --hold {holdTimeMs}",
+                    WorkingDirectory = projectDir,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                }
+            };
+            
+            process1.Start();
+            _logger.LogInformation("[{ElapsedTime}ms] Started first process (PID: {ProcessId}) - will hold lock for {HoldTime}ms", 
+                stopwatch.ElapsedMilliseconds, process1.Id, holdTimeMs);
+            
+            // Wait a bit to ensure the first process has time to acquire the lock
+            await Task.Delay(1000);
+            
+            _logger.LogInformation("[{ElapsedTime}ms] Starting second process to attempt to take the same lock...", stopwatch.ElapsedMilliseconds);
+            
+            // Start the second process that will try to acquire the same lock
+            var process2 = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = $"run --project \"{projectDir}\" -- --take {testLockKey} --hold 1000",
+                    WorkingDirectory = projectDir,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                }
+            };
+            
+            process2.Start();
+            _logger.LogInformation("[{ElapsedTime}ms] Started second process (PID: {ProcessId}) - should block until first process releases the lock", 
+                stopwatch.ElapsedMilliseconds, process2.Id);
+            
+            // Start reading output from processes
+            var process1OutputTask = Task.Run(() => ReadProcessOutputAsync(process1, "Process 1"));
+            var process2OutputTask = Task.Run(() => ReadProcessOutputAsync(process2, "Process 2"));
+            
+            // Wait for both processes to complete
+            _logger.LogInformation("[{ElapsedTime}ms] Waiting for both processes to complete...", stopwatch.ElapsedMilliseconds);
+            
+            await Task.WhenAll(
+                Task.Run(() => process1.WaitForExit()),
+                Task.Run(() => process2.WaitForExit()),
+                process1OutputTask,
+                process2OutputTask
+            );
+            
+            var elapsedTime = stopwatch.ElapsedMilliseconds;
+            stopwatch.Stop();
+            
+            // Verify the test results
+            if (elapsedTime >= holdTimeMs)
+            {
+                _logger.LogInformation("✅ Test PASSED: Inter-Process Mutual Exclusion");
+                _logger.LogInformation("Total test duration: {ElapsedTime}ms, which is greater than the first process hold time ({HoldTime}ms)", 
+                    elapsedTime, holdTimeMs);
+                _logger.LogInformation("This confirms the second process had to wait for the first process to release the lock");
+            }
+            else
+            {
+                _logger.LogError("❌ Test FAILED: Inter-Process Mutual Exclusion");
+                _logger.LogError("Test completed too quickly ({ElapsedTime}ms), suggesting the second process didn't wait for the lock", 
+                    elapsedTime);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Test FAILED: Inter-Process Mutual Exclusion ❌");
+        }
+    }
+    
+    private async Task ReadProcessOutputAsync(Process process, string processName)
+    {
+        while (!process.StandardOutput.EndOfStream)
+        {
+            string line = await process.StandardOutput.ReadLineAsync();
+            if (!string.IsNullOrEmpty(line))
+            {
+                _logger.LogInformation("[{ProcessName}] {OutputLine}", processName, line);
+            }
         }
     }
 
