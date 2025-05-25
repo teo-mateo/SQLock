@@ -138,11 +138,8 @@ namespace SQLockDemo.Services
                     await using DbConnection lockConn2 = db2.Database.GetDbConnection();
                     await lockConn2.OpenAsync();
                     await using var sqlLock = new SqlDistributedLock(lockConn2, "vehicle", vehicleId);
-                    if (!await sqlLock.TryAcquireAsync())
-                    {
-                        Console.WriteLine("[Task2] Could not acquire distributed lock.");
-                        return;
-                    }
+                    await sqlLock.AcquireAsync();
+                    
                     Vehicle v2 = await db2.Vehicles.FirstAsync(v => v.Id == vehicleId);
                     v2.Mileage += 200;
                     semaphore.Release();

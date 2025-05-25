@@ -30,7 +30,7 @@ namespace SQLock
         /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
         public async Task AcquireAsync(int timeoutMs = 30000, CancellationToken cancellationToken = default)
         {
-            bool acquired = await AcquireLockInternal(timeoutMs, cancellationToken).ConfigureAwait(false);
+            bool acquired = await AcquireLockInternal(timeoutMs, cancellationToken);
             if (!acquired)
                 throw new InvalidOperationException($"Failed to acquire lock '{_lockName}' within {timeoutMs}ms.");
         }
