@@ -30,14 +30,19 @@ namespace SQLockDemo.Services
                     ("Kia", "Forte")
                 };
 
-                var vehicles = makesAndModels.Select((mm, i) => new Vehicle
+                var vehicles = new List<Vehicle>(10_000);
+                for (int i = 0; i < 10_000; i++)
                 {
-                    Make = mm.Make,
-                    Model = mm.Model,
-                    Year = 2018 + (i % 6),
-                    LicensePlate = $"ABC{i:000}",
-                    Mileage = 50000 + i * 1000
-                }).ToList();
+                    var mm = makesAndModels[i % makesAndModels.Length];
+                    vehicles.Add(new Vehicle
+                    {
+                        Make = mm.Make,
+                        Model = mm.Model,
+                        Year = 2018 + (i % 6),
+                        LicensePlate = $"ABC{i:00000}",
+                        Mileage = 50000 + i * 10
+                    });
+                }
 
                 db.Vehicles.AddRange(vehicles);
                 await db.SaveChangesAsync();

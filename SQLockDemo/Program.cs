@@ -60,10 +60,14 @@ if (args.Contains("--sim"))
         return;
     }
     var rand = new Random();
-    var randomVehicle = vehicles[rand.Next(vehicles.Count)];
-    long vehicleId = randomVehicle.Id;
-    Console.WriteLine($"Simulating race condition on Vehicle Id: {vehicleId}");
-    await vehiclesService.SimulateRaceConditionAsync(vehicleId);
+    for (int i = 0; i < 100; i++)
+    {
+        var randomVehicle = vehicles[rand.Next(vehicles.Count)];
+        long vehicleId = randomVehicle.Id;
+        Console.WriteLine($"Simulating race condition on Vehicle Id: {vehicleId}");
+        await vehiclesService.SimulateRaceConditionAsync(vehicleId);
+    }
+
     return;
 }
 
@@ -78,10 +82,14 @@ if (args.Contains("--simlock"))
         return;
     }
     var rand = new Random();
-    var randomVehicle = vehicles[rand.Next(vehicles.Count)];
-    long vehicleId = randomVehicle.Id;
-    Console.WriteLine($"Simulating race condition with distributed lock on Vehicle Id: {vehicleId}");
-    await vehiclesService.SimulateRaceConditionWithDistributedLockAsync(vehicleId);
+    for (int i = 0; i < 100; i++)
+    {
+        var randomVehicle = vehicles[rand.Next(vehicles.Count)];
+        long vehicleId = randomVehicle.Id;
+        Console.WriteLine($"Simulating race condition with distributed lock on Vehicle Id: {vehicleId}");
+        await vehiclesService.SimulateRaceConditionWithDistributedLockAsync(vehicleId);
+    }
+
     return;
 }
 
