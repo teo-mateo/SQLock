@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using System;
 using Data;
+using SQLock;
 using SQLockDemo.Services;
 
 var host = Host.CreateDefaultBuilder(args)
@@ -15,7 +16,10 @@ var host = Host.CreateDefaultBuilder(args)
     {
         var connectionString = context.Configuration.GetConnectionString("DefaultConnection")!;
         services.AddDbContext<VehicleManagementDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddSingleton<ISqlDistributedLockFactory>(_ => new SqlDistributedLockFactory(connectionString));
+        
         services.AddScoped<IVehiclesService, VehiclesService>();
+
     })
     .Build();
 

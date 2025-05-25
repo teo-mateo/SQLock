@@ -10,8 +10,17 @@ using System.Data.Common;
 
 namespace SQLockDemo.Services
 {
-    public class VehiclesService(VehicleManagementDbContext db) : IVehiclesService
+    public class VehiclesService : IVehiclesService
     {
+        private readonly VehicleManagementDbContext db;
+        private readonly ISqlDistributedLockFactory lockFactory;
+
+        public VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockFactory lockFactory)
+        {
+            this.db = db;
+            this.lockFactory = lockFactory;
+        }
+
         public async Task SeedAsync()
         {
             if (!await db.Vehicles.AnyAsync())
@@ -30,19 +39,14 @@ namespace SQLockDemo.Services
                     ("Kia", "Forte")
                 };
 
-                var vehicles = new List<Vehicle>(10_000);
-                for (int i = 0; i < 10_000; i++)
+                var vehicles = makesAndModels.Select((mm, i) => new Vehicle
                 {
-                    var mm = makesAndModels[i % makesAndModels.Length];
-                    vehicles.Add(new Vehicle
-                    {
-                        Make = mm.Make,
-                        Model = mm.Model,
-                        Year = 2018 + (i % 6),
-                        LicensePlate = $"ABC{i:00000}",
-                        Mileage = 50000 + i * 10
-                    });
-                }
+                    Make = mm.Make,
+                    Model = mm.Model,
+                    Year = 2018 + (i % 6),
+                    LicensePlate = $"ABC{i:000}",
+                    Mileage = 50000 + i * 1000
+                }).ToList();
 
                 db.Vehicles.AddRange(vehicles);
                 await db.SaveChangesAsync();
@@ -55,7 +59,6 @@ namespace SQLockDemo.Services
 
         public async Task SimulateRaceConditionAsync(long vehicleId)
         {
-            var semaphore = new SemaphoreSlim(0, 2);
             var optionsBuilder = new DbContextOptionsBuilder<VehicleManagementDbContext>();
             optionsBuilder.UseSqlServer(db.Database.GetDbConnection().ConnectionString);
             var options = optionsBuilder.Options;
@@ -67,9 +70,6 @@ namespace SQLockDemo.Services
                     await using var db1 = new VehicleManagementDbContext(options);
                     Vehicle v1 = await db1.Vehicles.FirstAsync(v => v.Id == vehicleId);
                     v1.Mileage += 100;
-                    semaphore.Release();
-                    await semaphore.WaitAsync();
-                    await Task.Delay(500); // Simulate work
                     db1.Vehicles.Update(v1);
                     await db1.SaveChangesAsync();
                 }
@@ -86,9 +86,6 @@ namespace SQLockDemo.Services
                     await using var db2 = new VehicleManagementDbContext(options);
                     Vehicle v2 = await db2.Vehicles.FirstAsync(v => v.Id == vehicleId);
                     v2.Mileage += 200;
-                    semaphore.Release();
-                    await semaphore.WaitAsync();
-                    await Task.Delay(1000); // Simulate longer work
                     db2.Vehicles.Update(v2);
                     await db2.SaveChangesAsync();
                 }
@@ -113,7 +110,7 @@ namespace SQLockDemo.Services
                 try
                 {
                     await using var db1 = new VehicleManagementDbContext(options);
-                    await using var sqlLock = new SqlDistributedLock(db1.Database.GetConnectionString()!, "vehicle", vehicleId);
+                    await using var sqlLock = lockFactory.CreateLock("vehicle", vehicleId);
                     if (!await sqlLock.TryAcquireAsync())
                     {
                         Console.WriteLine("[Task1] Could not acquire distributed lock.");
@@ -121,9 +118,9 @@ namespace SQLockDemo.Services
                     }
                     Vehicle v1 = await db1.Vehicles.FirstAsync(v => v.Id == vehicleId);
                     v1.Mileage += 100;
-                    semaphore.Release();
-                    await semaphore.WaitAsync();
-                    await Task.Delay(500); // Simulate work
+                    // semaphore.Release();
+                    // await semaphore.WaitAsync();
+                    // await Task.Delay(500); // Simulate work
                     db1.Vehicles.Update(v1);
                     await db1.SaveChangesAsync();
                 }
@@ -138,14 +135,14 @@ namespace SQLockDemo.Services
                 try
                 {
                     await using var db2 = new VehicleManagementDbContext(options);
-                    await using var sqlLock = new SqlDistributedLock(db2.Database.GetConnectionString()!, "vehicle", vehicleId);
+                    await using var sqlLock = lockFactory.CreateLock("vehicle", vehicleId);
                     await sqlLock.AcquireAsync();
                     
                     Vehicle v2 = await db2.Vehicles.FirstAsync(v => v.Id == vehicleId);
                     v2.Mileage += 200;
-                    semaphore.Release();
-                    await semaphore.WaitAsync();
-                    await Task.Delay(1000); // Simulate longer work
+                    // semaphore.Release();
+                    // await semaphore.WaitAsync();
+                    // await Task.Delay(1000); // Simulate longer work
                     db2.Vehicles.Update(v2);
                     await db2.SaveChangesAsync();
                 }

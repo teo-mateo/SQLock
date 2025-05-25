@@ -22,5 +22,12 @@
     <ProjectReference Include="..\Data\Data.csproj" />
     <ProjectReference Include="..\SQLock\SQLock.csproj" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <None Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
 
 </Project>
