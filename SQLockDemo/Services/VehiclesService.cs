@@ -39,11 +39,6 @@ public class VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockF
         }
     }
 
-    public async Task<int> CountAsync()
-    {
-        return await db.Vehicles.CountAsync();
-    }
-
     public async Task<List<Vehicle>> GetAllAsync()
     {
         return await db.Vehicles.ToListAsync();
@@ -102,7 +97,7 @@ public class VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockF
             try
             {
                 await using var db1 = new VehicleManagementDbContext(options);
-                await using SqlDistributedLock sqlLock = lockFactory.CreateLock("vehicle", vehicleId);
+                await using SqlDistributedLock sqlLock = lockFactory.TakeLock("vehicle", vehicleId);
                 if (!await sqlLock.TryAcquireAsync())
                 {
                     Console.WriteLine("[Task1] Could not acquire distributed lock.");
@@ -111,9 +106,6 @@ public class VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockF
 
                 Vehicle v1 = await db1.Vehicles.FirstAsync(v => v.Id == vehicleId);
                 v1.Mileage += 100;
-                // semaphore.Release();
-                // await semaphore.WaitAsync();
-                // await Task.Delay(500); // Simulate work
                 db1.Vehicles.Update(v1);
                 await db1.SaveChangesAsync();
             }
@@ -128,14 +120,11 @@ public class VehiclesService(VehicleManagementDbContext db, ISqlDistributedLockF
             try
             {
                 await using var db2 = new VehicleManagementDbContext(options);
-                await using SqlDistributedLock sqlLock = lockFactory.CreateLock("vehicle", vehicleId);
+                await using SqlDistributedLock sqlLock = lockFactory.TakeLock("vehicle", vehicleId);
                 await sqlLock.AcquireAsync();
 
                 Vehicle v2 = await db2.Vehicles.FirstAsync(v => v.Id == vehicleId);
                 v2.Mileage += 200;
-                // semaphore.Release();
-                // await semaphore.WaitAsync();
-                // await Task.Delay(1000); // Simulate longer work
                 db2.Vehicles.Update(v2);
                 await db2.SaveChangesAsync();
             }

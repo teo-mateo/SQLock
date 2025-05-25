@@ -3,16 +3,22 @@
 public interface ISqlDistributedLockFactory
 {
     /// <summary>
-    ///     Creates a new <see cref="SqlDistributedLock" /> for the specified <paramref name="entityName" /> and
-    ///     <paramref name="id" />
+    /// Creates a new <see cref="SqlDistributedLock" /> for the specified <paramref name="entityName" /> and
+    /// <paramref name="id" />
     /// </summary>
-    SqlDistributedLock CreateLock(string entityName, long id);
+    SqlDistributedLock TakeLock(string entityName, long id);
+
+    /// <summary>
+    /// Creates a new <see cref="SqlDistributedLock" /> for the specified <paramref name="key" />
+    /// </summary>
+    /// <param name="key"></param>
+    /// <returns></returns>
+    SqlDistributedLock TakeLock(string key);
 }
 
 public sealed class SqlDistributedLockFactory(string connectionString) : ISqlDistributedLockFactory
 {
-    public SqlDistributedLock CreateLock(string entityName, long id)
-    {
-        return new SqlDistributedLock(connectionString, entityName, id);
-    }
+    public SqlDistributedLock TakeLock(string entityName, long id) => new(connectionString, $"{entityName}:{id}");
+
+    public SqlDistributedLock TakeLock(string lockName) => new(connectionString, lockName);
 }

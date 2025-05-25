@@ -5,7 +5,7 @@ using Microsoft.Data.SqlClient;
 namespace SQLock;
 
 /// <summary>
-///     Implements a distributed lock using SQL Server's sp_getapplock (Session scope).
+/// Implements a distributed lock using SQL Server's sp_getapplock (Session scope).
 /// </summary>
 public class SqlDistributedLock : IAsyncDisposable, IDisposable
 {
@@ -13,17 +13,17 @@ public class SqlDistributedLock : IAsyncDisposable, IDisposable
     private readonly string _lockName;
     private bool _lockAcquired;
 
-    public SqlDistributedLock(string connectionString, string entityName, long id)
-        : this(new SqlConnection(connectionString), entityName, id)
+    public SqlDistributedLock(string connectionString, string lockName)
+        : this(new SqlConnection(connectionString), lockName)
     {
     }
 
-    private SqlDistributedLock(DbConnection connection, string entityName, long id)
+    private SqlDistributedLock(DbConnection connection, string lockName)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
-        if (string.IsNullOrWhiteSpace(entityName))
-            throw new ArgumentException("Entity name cannot be null or whitespace.", nameof(entityName));
-        _lockName = $"{entityName}:{id}";
+        if (string.IsNullOrWhiteSpace(lockName))
+            throw new ArgumentException("lockName cannot be null or whitespace.", nameof(lockName));
+        _lockName = lockName;
     }
 
     public async ValueTask DisposeAsync()
