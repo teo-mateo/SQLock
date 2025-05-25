@@ -24,6 +24,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddTransient<ISqlockTest, MutualExclusionThreadTest>();
         services.AddTransient<ISqlockTest, InterProcessMutualExclusionTest>();
         services.AddTransient<ISqlockTest, TimeoutRespectedTest>();
+        services.AddTransient<ISqlockTest, CancellationTokenHonouredTest>();
         
         // Register the DemoRunnerService
         services.AddScoped<DemoRunnerService>();

@@ -122,7 +122,23 @@ public class SqlDistributedLock : IAsyncDisposable, IDisposable
         resultParam.Direction = ParameterDirection.ReturnValue;
         cmd.Parameters.Add(resultParam);
 
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        try
+        {
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqlException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            // If cancellation was requested and SqlException occurred,
+            // it's highly probable the SqlException is due to the cancellation.
+            // Throw OperationCanceledException to conform to standard cancellation pattern.
+            // Check for specific error numbers if more precise handling is needed, e.g., error 0 for timeout/cancel.
+            if (ex.Number == 0 || ex.Message.Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("cancelled by user", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new OperationCanceledException("The database operation was canceled.", ex, cancellationToken);
+            }
+            throw; // Re-throw if not the specific cancellation-related SqlException
+        }
+        
         var result = (int)resultParam.Value!;
         _lockAcquired = result >= 0;
 
