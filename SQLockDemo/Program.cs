@@ -15,6 +15,7 @@ IHost host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<ISqlDistributedLockFactory>(_ => new SqlDistributedLockFactory(connectionString));
 
         services.AddScoped<IVehiclesService, VehiclesService>();
+        services.AddScoped<DemoRunner>();
     })
     .Build();
 
@@ -24,6 +25,15 @@ Console.WriteLine($"Connection string: {connectionString}");
 
 bool canConnect = SQLHelper.TestConnection(connectionString);
 Console.WriteLine(canConnect ? "Database connection successful!" : "Failed to connect to database.");
+
+if (args.Contains("--demo"))
+{
+    Console.WriteLine("Running SQLock demo tests...");
+    using IServiceScope scope = host.Services.CreateScope();
+    var demoRunner = scope.ServiceProvider.GetRequiredService<DemoRunner>();
+    await demoRunner.RunTestsAsync();
+    return;
+}
 
 if (args.Contains("--seed"))
 {
